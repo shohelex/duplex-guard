@@ -3,9 +3,10 @@
 Reliable 2-sided printing on Windows from any app. Fixes page sizes and stops the driver silently
 turning duplex off.
 
-**Status:** early version, set up for the Epson L6460 on A4 paper only. The printer data has been
-checked byte by byte without paper, but a full 2-sided print has not yet been confirmed on paper.
-Printing from Chrome and Edge is not yet tested.
+**Status:** early version, set up for the Epson L6460 on A4 paper only. A 4-page Letter-size test
+job printed correctly on paper as 2 A4 sheets, on both sides and with no printer error. Word and
+Acrobat were tested without paper, by checking the printer data. Printing from Chrome and Edge is
+not yet tested.
 
 ## Using it
 
