@@ -1,12 +1,15 @@
-# Installs the "L6460 Duplex" printer and its background program.
+# Installs the "L6460 Duplex" and "L6460 One-sided" printers and their background program.
 # Asks for Windows admin approval once. The existing EPSON L6460 Series printer is not changed.
 param([string]$Pythonw)
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $taskName = 'L6460 Duplex'
-$queueName = 'L6460 Duplex'
-$portName = '\\.\pipe\L6460Duplex'
+# Printer name and its pipe. Keep in step with CAPTURES in l6460\config.py.
+$captures = [ordered]@{
+    'L6460 Duplex'    = '\\.\pipe\L6460Duplex'
+    'L6460 One-sided' = '\\.\pipe\L6460OneSided'
+}
 
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $isAdmin = (New-Object Security.Principal.WindowsPrincipal($identity)).IsInRole(
@@ -38,21 +41,32 @@ try {
         -Principal $principal -Settings $settings -Force | Out-Null
     Start-ScheduledTask -TaskName $taskName
 
-    $deadline = (Get-Date).AddSeconds(20)
-    while (-not (Test-Path $portName)) {
-        if ((Get-Date) -gt $deadline) { throw 'The background program did not start.' }
-        Start-Sleep -Milliseconds 300
+    foreach ($queueName in $captures.Keys) {
+        $portName = $captures[$queueName]
+        $deadline = (Get-Date).AddSeconds(20)
+        while (-not (Test-Path $portName)) {
+            if ((Get-Date) -gt $deadline) { throw "The background program is not listening on $portName." }
+            Start-Sleep -Milliseconds 300
+        }
+        if (-not (Get-PrinterPort -Name $portName -ErrorAction SilentlyContinue)) {
+            Add-PrinterPort -Name $portName
+        }
+        if (-not (Get-Printer -Name $queueName -ErrorAction SilentlyContinue)) {
+            Add-Printer -Name $queueName -DriverName 'Microsoft Print To PDF' -PortName $portName
+        }
+        Set-PrintConfiguration -PrinterName $queueName -PaperSize A4
     }
 
-    if (-not (Get-PrinterPort -Name $portName -ErrorAction SilentlyContinue)) {
-        Add-PrinterPort -Name $portName
-    }
-    if (-not (Get-Printer -Name $queueName -ErrorAction SilentlyContinue)) {
-        Add-Printer -Name $queueName -DriverName 'Microsoft Print To PDF' -PortName $portName
-    }
-    Set-PrintConfiguration -PrinterName $queueName -PaperSize A4
+    # Start menu shortcut to the paper size window.
+    $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut(
+        (Join-Path ([Environment]::GetFolderPath('Programs')) 'duplex-guard settings.lnk'))
+    $shortcut.TargetPath = $Pythonw
+    $shortcut.Arguments = '-m l6460 settings'
+    $shortcut.WorkingDirectory = $root
+    $shortcut.Description = 'Choose the paper size for 2-sided printing'
+    $shortcut.Save()
 
-    Write-Output "Installed '$queueName'."
+    Write-Output "Installed: $($captures.Keys -join ', ')."
     exit 0
 }
 catch {

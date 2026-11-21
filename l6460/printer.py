@@ -1,4 +1,4 @@
-"""Print a normalized A4 PDF on the L6460 with explicit, verified settings."""
+"""Print a normalized PDF on the L6460 with explicit, verified settings."""
 import ctypes
 from ctypes import wintypes
 from dataclasses import dataclass
@@ -10,7 +10,7 @@ import win32gui
 import win32print
 from PIL import Image
 
-from .config import EPSON_QUEUE, MEDIA_PLAIN, PAPER_A4, SOURCE_CASSETTE
+from .config import A4, EPSON_QUEUE, MEDIA_PLAIN, SOURCE_CASSETTE, Paper
 
 DM_OUT_BUFFER, DM_IN_BUFFER = 2, 8
 PHYSICALWIDTH, PHYSICALHEIGHT = 110, 111
@@ -58,14 +58,14 @@ class SentJob:
     dpi: int
 
 
-def locked_devmode(handle, duplex_edge: int):
-    """Return a devmode for A4, cassette, plain paper and duplex, checked by the driver.
+def locked_devmode(handle, duplex_edge: int, paper: Paper = A4):
+    """Return a devmode for `paper`, cassette, plain paper and duplex, checked by the driver.
 
     The driver can silently change settings it does not allow, such as turning duplex
     off, so what it hands back is compared with what was asked for.
     """
     wanted = win32print.GetPrinter(handle, 2)["pDevMode"]
-    wanted.PaperSize = PAPER_A4
+    wanted.PaperSize = paper.paper_id
     wanted.Orientation = win32con.DMORIENT_PORTRAIT
     wanted.Duplex = duplex_edge
     wanted.DefaultSource = SOURCE_CASSETTE
@@ -81,7 +81,7 @@ def locked_devmode(handle, duplex_edge: int):
     win32print.DocumentProperties(0, handle, EPSON_QUEUE, final, wanted,
                                   DM_IN_BUFFER | DM_OUT_BUFFER)
 
-    expected = {"PaperSize": PAPER_A4, "Duplex": duplex_edge,
+    expected = {"PaperSize": paper.paper_id, "Duplex": duplex_edge,
                 "DefaultSource": SOURCE_CASSETTE, "MediaType": MEDIA_PLAIN,
                 "Orientation": win32con.DMORIENT_PORTRAIT}
     changed = {key: getattr(final, key) for key, value in expected.items()
@@ -114,11 +114,11 @@ def _draw_page(hdc: int, page: fitz.Page) -> None:
 
 
 def send(pdf: Path, title: str, duplex_edge: int, copies: int = 1,
-         to_file: Path | None = None) -> SentJob:
+         to_file: Path | None = None, paper: Paper = A4) -> SentJob:
     """Send `pdf` to the Epson. `to_file` keeps the printer data in a file instead of printing."""
     handle = win32print.OpenPrinter(EPSON_QUEUE)
     try:
-        devmode = locked_devmode(handle, duplex_edge)
+        devmode = locked_devmode(handle, duplex_edge, paper)
     finally:
         win32print.ClosePrinter(handle)
 

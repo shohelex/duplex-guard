@@ -1,8 +1,6 @@
-"""Run with: python -m l6460 serve [--to-file FOLDER]"""
+"""Run with: python -m l6460 serve [--to-file FOLDER] | settings"""
 import argparse
 from pathlib import Path
-
-from .service import serve
 
 
 def main() -> None:
@@ -11,8 +9,15 @@ def main() -> None:
     run = commands.add_parser("serve", help="receive jobs from the L6460 Duplex printer")
     run.add_argument("--to-file", type=Path,
                      help="test mode: save the printer data in this folder and use no paper")
+    commands.add_parser("settings", help="choose the paper size for 2-sided printing")
     args = parser.parse_args()
-    serve(args.to_file)
+
+    if args.command == "settings":
+        from .ui import run as run_settings
+        run_settings()
+    else:
+        from .service import serve
+        serve(args.to_file)
 
 
 if __name__ == "__main__":

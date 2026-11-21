@@ -10,18 +10,52 @@ not yet tested.
 
 ## Using it
 
-Print as usual and choose **L6460 Duplex** as the printer. This works from Word, Acrobat,
-Chrome, Edge and anything else with a Print dialog. For one-sided printing, keep using
-**EPSON L6460 Series**.
+Choose one-sided or 2-sided by choosing the printer, in any app's Print dialog:
 
-Printer settings in the Print dialog do not matter: every job is printed 2-sided on A4 plain
-paper from the cassette. The print range and number of copies are still honoured.
+| Printer | Prints |
+|---|---|
+| **L6460 Duplex** (the default) | 2-sided |
+| **L6460 One-sided** | one-sided |
+
+Both fix the paper size and margins the same way. Their Print dialogs have no 1-sided/2-sided
+option, because the Windows PDF driver they are built on has none. **EPSON L6460 Series** is
+still there, but it prints whatever paper size the app sends.
+
+Printer settings in the Print dialog do not matter: every job is printed 2-sided on plain paper
+from the cassette, at the paper size chosen in the settings window. The print range and number
+of copies are still honoured.
+
+## Paper size
+
+Click the tray icon, or open **duplex-guard settings** from the Start menu, to see and change the
+paper size. It is A4 until you change it. Only A4, Letter, B5 and 16K are offered, because the
+driver turns 2-sided off for every other size.
+
+Saving does three things:
+
+- every job on **L6460 Duplex** is fitted to that size;
+- that size becomes your default paper on both **EPSON L6460 Series** and **L6460 Duplex**, so
+  every app's Print dialog starts with it, including when you choose 2-sided on the Epson itself;
+- the background program sets it again each time it starts, in case something replaced it.
+
+Set the same size on the printer's own screen. The computer cannot change that setting.
+
+A default only sets the size an app starts with, and an app can still choose another size. Acrobat
+Reader, for example, sent a 210 x 280 mm PDF as Letter. So:
+
+- **L6460 Duplex is the default printer**, so it is already chosen when you print. Pick
+  **L6460 One-sided** for one-sided printing. Windows' option to switch the default
+  printer by itself is turned off, so this stays.
+- **The Epson is guarded.** If a 2-sided job reaches **EPSON L6460 Series** with a paper size
+  other than the chosen one, the background program pauses it straight away and asks whether
+  to cancel it (then reprint with L6460 Duplex) or print it anyway. It cannot correct such a
+  job, because Windows has already laid the pages out for the wrong size.
 
 | Your document | What happens |
 |---|---|
-| A4 pages | Printed at exactly 100% |
-| Letter, Legal or larger pages | Shrunk to fit A4 and centred |
-| Pages smaller than A4 | Kept at 100% and centred |
+| Pages already the chosen size | Printed at exactly 100% |
+| Larger pages | Shrunk to fit and centred |
+| Smaller pages | Kept at 100% and centred |
 | Landscape pages | Turned to fit the sheet |
 | Every page is landscape | Flips on the short edge, so it turns like a book |
 
@@ -35,14 +69,15 @@ paper from the cassette. The print range and number of copies are still honoured
 
 ## One setting on the printer
 
-The printer's own paper setting must say **A4, Plain paper**. It is on the printer's screen, and
+The printer's own paper setting must say **the chosen size, Plain paper**. It is on the printer's screen, and
 it usually asks when the cassette is put back in. The computer cannot read or change it.
 
 ## How it works
 
 ```
 Any app -> "L6460 Duplex" printer -> named pipe -> background program
-        -> every page rebuilt as A4 -> EPSON L6460 Series (A4, Cassette, Plain, 2-sided)
+        -> every page rebuilt at the chosen size -> EPSON L6460 Series (that size, Cassette,
+           Plain, 2-sided)
 ```
 
 - The driver can silently turn 2-sided off, so the tool checks the settings it hands back. If

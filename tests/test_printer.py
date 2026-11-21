@@ -100,7 +100,7 @@ def test_job_stops_if_driver_changes_a_setting(monkeypatch):
 
 
 def test_refused_settings_create_no_job(tmp_path, sample, monkeypatch):
-    def refuse(handle, edge):
+    def refuse(handle, edge, paper=None):
         raise printer.PrinterRefused("no")
 
     monkeypatch.setattr(printer, "locked_devmode", refuse)
@@ -110,3 +110,21 @@ def test_refused_settings_create_no_job(tmp_path, sample, monkeypatch):
     with pytest.raises(printer.PrinterRefused):
         printer.send(sample, "test", DUPLEX_LONG_EDGE, to_file=tmp_path / "job.prn")
     assert not started.called
+
+
+def test_printer_data_follows_chosen_paper(tmp_path, sample):
+    from l6460.config import PAPERS
+    output = tmp_path / "job.prn"
+    printer.send(sample, "test", DUPLEX_LONG_EDGE, to_file=output, paper=PAPERS["Letter"])
+    data = wait_for(output)
+    assert remote_settings(data)["DP"] == b"\x00\x02"
+    assert sheet_size(data) == (5100, 6600), "8.5 x 11 in at 600 dpi"
+
+
+def test_one_sided_printer_data_has_duplex_off(tmp_path, sample):
+    from l6460.config import ONE_SIDED
+    output = tmp_path / "job.prn"
+    printer.send(sample, "test", ONE_SIDED, to_file=output)
+    data = wait_for(output)
+    assert remote_settings(data)["DP"][-1] == 0, "duplex must be off"
+    assert sheet_size(data) == A4_AT_600_DPI

@@ -167,3 +167,23 @@ def test_password_protected_file_is_refused(tmp_path):
         doc.save(locked, encryption=fitz.PDF_ENCRYPT_AES_256, user_pw="secret", owner_pw="owner")
     with pytest.raises(UnprintableDocument):
         normalize(locked, tmp_path / "out.pdf")
+
+
+def test_pages_follow_the_chosen_paper(tmp_path):
+    from l6460.config import PAPERS
+    letter = PAPERS["Letter"]
+    doc, report = run(tmp_path, [A4, LETTER], paper=letter)
+    assert report.paper == "Letter"
+    for page in doc:
+        assert page.rect.width == pytest.approx(letter.width_pt, abs=0.05)
+        assert page.rect.height == pytest.approx(letter.height_pt, abs=0.05)
+    assert report.scaled_pages == [1], "the A4 page shrinks, the Letter page stays at 100%"
+
+
+def test_one_sided_job_gets_no_blank_backs_and_one_page_per_sheet(tmp_path):
+    from l6460.config import ONE_SIDED
+    doc, report = run(tmp_path, [A4] * 3, copies=2, spooled_pages=3, two_sided=False)
+    assert report.duplex_edge == ONE_SIDED
+    assert doc.page_count == 3 and not report.blank_added
+    assert report.sheets == 6, "3 pages x 2 copies, one page per sheet"
+    assert "one-sided" in report.summary()

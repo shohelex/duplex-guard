@@ -1,4 +1,4 @@
-"""Rebuild any PDF so that every page is exactly A4 portrait.
+"""Rebuild any PDF so that every page is exactly the chosen paper size, portrait.
 
 The result is an ordinary PDF, so it can be inspected or tested without using paper.
 """
@@ -7,8 +7,8 @@ from pathlib import Path
 
 import fitz
 
-from .config import (A4_HEIGHT_PT, A4_TOLERANCE_MM, A4_WIDTH_PT, DUPLEX_LONG_EDGE,
-                     DUPLEX_SHORT_EDGE, MM_PER_PT)
+from .config import (A4, DUPLEX_LONG_EDGE,
+                     DUPLEX_SHORT_EDGE, MM_PER_PT, ONE_SIDED, SIZE_TOLERANCE_MM, Paper)
 
 
 class UnprintableDocument(Exception):
@@ -26,11 +26,16 @@ class Report:
     smallest_scale: float = 1.0
     blank_added: bool = False
     copies: int = 1
+    paper: str = A4.name
 
     def summary(self) -> str:
         sizes = ", ".join(f"{count} x {size}" for size, count in self.source_sizes.items())
-        edge = "short edge" if self.duplex_edge == DUPLEX_SHORT_EDGE else "long edge"
-        parts = [f"{self.pages} pages on {self.sheets} sheets, flip on {edge}", f"source: {sizes}"]
+        if self.duplex_edge == ONE_SIDED:
+            sides = "one-sided"
+        else:
+            edge = "short edge" if self.duplex_edge == DUPLEX_SHORT_EDGE else "long edge"
+            sides = f"flip on {edge}"
+        parts = [f"{self.pages} pages on {self.sheets} {self.paper} sheets, {sides}", f"source: {sizes}"]
         if self.copies > 1:
             parts.insert(1, f"{self.copies} copies")
         if self.scaled_pages:
@@ -44,9 +49,10 @@ def _size_name(width_pt: float, height_pt: float) -> str:
     return f"{width_pt * MM_PER_PT:.0f}x{height_pt * MM_PER_PT:.0f}mm"
 
 
-def _is_a4(width_pt: float, height_pt: float) -> bool:
-    tolerance = A4_TOLERANCE_MM / MM_PER_PT
-    return abs(width_pt - A4_WIDTH_PT) <= tolerance and abs(height_pt - A4_HEIGHT_PT) <= tolerance
+def _matches(width_pt: float, height_pt: float, paper: Paper) -> bool:
+    tolerance = SIZE_TOLERANCE_MM / MM_PER_PT
+    return (abs(width_pt - paper.width_pt) <= tolerance
+            and abs(height_pt - paper.height_pt) <= tolerance)
 
 
 def plan_copies(pdf_pages: int, spooled_pages: int, copies: int) -> tuple:
@@ -65,10 +71,11 @@ def plan_copies(pdf_pages: int, spooled_pages: int, copies: int) -> tuple:
     return list(range(pdf_pages)), copies
 
 
-def normalize(source: Path, target: Path, copies: int = 1, spooled_pages: int = 0) -> Report:
-    """Write `target` with one A4 portrait page for each page of one set in `source`.
+def normalize(source: Path, target: Path, copies: int = 1, spooled_pages: int = 0,
+              paper: Paper = A4, two_sided: bool = True) -> Report:
+    """Write `target` with one `paper`-sized portrait page for each page of one set in `source`.
 
-    Landscape pages are turned to fit the sheet. Pages larger than A4 shrink to fit and
+    Landscape pages are turned to fit the sheet. Pages larger than the paper shrink to fit and
     smaller pages stay at 100%, centred. When several copies are due, an odd set gets a
     blank back, so that a second copy cannot start on the back of the first copy.
     """
@@ -82,7 +89,8 @@ def normalize(source: Path, target: Path, copies: int = 1, spooled_pages: int = 
             raise UnprintableDocument("the document is locked or has no pages")
 
         keep, sets = plan_copies(src.page_count, spooled_pages, copies)
-        report = Report(pages=len(keep), copies=sets)
+        report = Report(pages=len(keep), copies=sets, paper=paper.name)
+        sheet_w, sheet_h = paper.width_pt, paper.height_pt
         out = fitz.open()
         with out:
             for index in keep:
@@ -96,29 +104,31 @@ def normalize(source: Path, target: Path, copies: int = 1, spooled_pages: int = 
                     report.rotated_pages.append(index + 1)
                     width, height = height, width
 
-                if _is_a4(width, height):
-                    # Fill the sheet exactly, so true A4 pages stay at true size.
-                    box = fitz.Rect(0, 0, A4_WIDTH_PT, A4_HEIGHT_PT)
+                if _matches(width, height, paper):
+                    # Fill the sheet exactly, so pages already this size stay at true size.
+                    box = fitz.Rect(0, 0, sheet_w, sheet_h)
                 else:
-                    scale = min(1.0, A4_WIDTH_PT / width, A4_HEIGHT_PT / height)
+                    scale = min(1.0, sheet_w / width, sheet_h / height)
                     if scale < 1.0:
                         report.scaled_pages.append(index + 1)
                         report.smallest_scale = min(report.smallest_scale, scale)
-                    left = (A4_WIDTH_PT - width * scale) / 2
-                    top = (A4_HEIGHT_PT - height * scale) / 2
+                    left = (sheet_w - width * scale) / 2
+                    top = (sheet_h - height * scale) / 2
                     box = fitz.Rect(left, top, left + width * scale, top + height * scale)
 
-                page = out.new_page(width=A4_WIDTH_PT, height=A4_HEIGHT_PT)
+                page = out.new_page(width=sheet_w, height=sheet_h)
                 page.show_pdf_page(box, src, index, rotate=90 if landscape else 0)
 
-            # A landscape-only document reads like a book when flipped on the short edge.
-            if len(report.rotated_pages) == report.pages:
-                report.duplex_edge = DUPLEX_SHORT_EDGE
-
-            if sets > 1 and out.page_count % 2:
-                out.new_page(width=A4_WIDTH_PT, height=A4_HEIGHT_PT)
-                report.blank_added = True
-
-            report.sheets = (out.page_count + 1) // 2
+            if not two_sided:
+                report.duplex_edge = ONE_SIDED
+                report.sheets = out.page_count * sets
+            else:
+                # A landscape-only document reads like a book when flipped on the short edge.
+                if len(report.rotated_pages) == report.pages:
+                    report.duplex_edge = DUPLEX_SHORT_EDGE
+                if sets > 1 and out.page_count % 2:
+                    out.new_page(width=sheet_w, height=sheet_h)
+                    report.blank_added = True
+                report.sheets = (out.page_count + 1) // 2
             out.save(target, garbage=3, deflate=True)
     return report
